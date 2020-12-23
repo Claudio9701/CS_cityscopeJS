@@ -1,6 +1,8 @@
 import React from "react";
 import { makeStyles } from "@material-ui/core/styles";
 import TextField from "@material-ui/core/TextField";
+import Switch from "@material-ui/core/Switch";
+import FormControlLabel from '@material-ui/core/FormControlLabel';
 import Typography from "@material-ui/core/Typography";
 import GridMaker from "./GridMaker/GridMaker";
 import CommitGrid from "./CommitGrid/CommitGrid";
@@ -33,11 +35,17 @@ export default function GridProps() {
         rotation: settings.GEOGRID.properties.header.rotation,
         cellSize: settings.GEOGRID.properties.header.cellSize,
         projection: settings.GEOGRID.properties.header.projection,
+        osmTypes: false,
     });
 
     const handleChangeForm = (event) => {
         const { id, value } = event.target;
         setformValues({ ...formValues, [id]: value });
+    };
+
+    const handleChangeFormSwitch = (event) => {
+        const { id, checked } = event.target;
+        setformValues({ ...formValues, [id]: checked });
     };
 
     const classes = useStyles();
@@ -158,6 +166,19 @@ export default function GridProps() {
                         defaultValue={formValues.projection}
                         type="string"
                         helperText="Note: wrong projection might break app. Find the relevant projection at: https://epsg.io/"
+                    />
+                </div>
+                <div className={classes.root}>
+                    <FormControlLabel
+                        control={
+                            <Switch
+                                checked={formValues.osmTypes}
+                                onChange={(event) => handleChangeFormSwitch(event)}
+                                id="osmTypes"
+                                color="primary"
+                            />
+                        }
+                        label="Use Types from OSM"
                     />
                 </div>
                 <div className={classes.root}>

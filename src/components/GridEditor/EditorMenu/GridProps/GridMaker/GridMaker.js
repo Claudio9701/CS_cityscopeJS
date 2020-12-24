@@ -9,11 +9,11 @@ import { useSelector } from "react-redux";
 export default function GridMaker(props) {
     const dispatch = useDispatch();
     const reduxState = useSelector((state) => state);
- 
 
-    const handleGridCreation = () => {
-        let grid = gridCreator(props.gridProps, reduxState.TYPES_LIST);
-        dispatch(listenToGridCreator(grid));
+    const handleGridCreation = async () => {
+        // NOTE: This will only wait if props.gridProps.osmTypes is true
+        let grid = await gridCreator(props.gridProps, reduxState.TYPES_LIST);
+        await dispatch(listenToGridCreator(grid));
     };
 
     return (

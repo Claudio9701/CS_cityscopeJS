@@ -1,8 +1,7 @@
 import proj4 from "proj4";
 import { _hexToRgb } from "../../../EditorMap/EditorMap";
-import { setLanduseType, overpassQuery } from "./osmHelpers"
-import * as turf from "turf";
-import * as osmtogeojson from "osmtogeojson"
+import { overpassQuery, fetchOverpassData, processOverpassData } from "./osmHelpers"
+import { featureCollection, centroid, bbox, tag } from "turf";
 
 function deg_to_rad(deg) {
     return (deg * Math.PI) / 180;
@@ -181,72 +180,12 @@ export const gridCreator = async (gridProps, typesList) => {
 
     // Handle OSM Data extraction and Land use estimation
     if (gridProps.osmTypes) {
-        // Build query
-        let overpassUrl = new URL('https://overpass-api.de/api/interpreter')
-        let params = new URLSearchParams({
-          'data': overpassQuery,
-          'bbox': turf.bbox(geojsonFeatureCollection).join()
-        })
-        overpassUrl.search = params.toString();
-
-        // Get grid cell centroids
-        let gridCentroids = turf.featureCollection(geojsonFeatureCollection.features.map(obj => {
-          let centroid = turf.centroid(obj)
-          centroid.properties = obj.properties
-          return centroid
-        }))
-        gridCentroids.properties = geojsonFeatureCollection.properties
-
-        // Get data and process land uses
-        async function fetchOsmData() {
-            // Get data
-            const response = await fetch(overpassUrl);
-            const result = await response.json();
-
-            // Convert to geojson
-            let osmData = await osmtogeojson(result)
-
-            // Process nodes
-            let osmNodes = await turf.featureCollection(osmData.features.filter(obj => obj.id.startsWith("node")));
-            let osmNodesBuffer = await turf.buffer(osmNodes, 0.01);
-            let osmNodesEnvelope = await turf.featureCollection(osmNodesBuffer.features.map(turf.envelope));
-
-            // Combine processed nodes with ways
-            let osmWays = await turf.featureCollection(osmData.features.filter(obj => obj.id.startsWith("way")));
-            let osmPolygons = await turf.featureCollection([...osmWays.features, ...osmNodesEnvelope.features])
-
-            // Get landuse for each polygon using map features (osm tags)
-            let osmPolygonsWithLanduse = await turf.featureCollection(osmPolygons.features.map(feat => {
-                feat.properties = {...feat.properties, ...types.filter(type => type.name === setLanduseType(feat))[0]}
-                return feat
-            }))
-
-            // Assing landuse to centroid with polygons (Spatial join)
-            let gridCentroidsWithLanduse = await turf.tag(gridCentroids, osmPolygonsWithLanduse, 'name', 'name')
-
-            // Set cell properties according to types
-            for (let i = 0; i < gridCentroidsWithLanduse.features.length; i++) {
-                let obj = await gridCentroidsWithLanduse.features[i];
-
-                let selected_type;
-                if (obj.properties.name === undefined) {
-                    // Default landuse is Residential (this must change)
-                    selected_type = types.filter(type => type.name === 'Residential')[0]
-                } else {
-                    selected_type = await types.filter(type => type.name === obj.properties.name)[0]
-                }
-
-                geojsonFeatureCollection.features[i].properties = {
-                    color: _hexToRgb(selected_type.color),
-                    height: selected_type.height,
-                    name: selected_type.name,
-                    interactive: selected_type.interactive,
-                    id: i,
-                }
-            }
-        }
-        return await fetchOsmData().then(() => geojsonFeatureCollection);
+        // Get grid bounding box
+        let gridBbox = bbox(geojsonFeatureCollection).join();
+        let overpassData = await fetchOverpassData(overpassQuery, gridBbox);
+        let osmPolygonsWithLanduse = await processOverpassData(overpassData, types);
+        // Assing OSM land use types to grid cells
+        await sjoinTypes(osmPolygonsWithLanduse, geojsonFeatureCollection, types);
     }
-    // If osmTypes is false return random landuses
-    return await geojsonFeatureCollection;
+    return geojsonFeatureCollection;
 };

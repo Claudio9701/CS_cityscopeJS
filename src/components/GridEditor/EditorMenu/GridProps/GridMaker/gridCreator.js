@@ -16,6 +16,45 @@ const randomProperty = (obj) => {
     return obj[keys[(keys.length * Math.random()) << 0]];
 };
 
+const sjoinTypes = async (osmPolygonsWithLanduse, geoJson, types) => {
+    /*
+    / Calculate grid cell centroids and make a spatial join to assing the
+    / corresponding landuse to each cell.
+    / WARNING: This function mutates geoJson.
+    */
+
+    // Get grid cell centroids
+    let gridCentroids = featureCollection(geoJson.features.map(obj => {
+      let cellCentroid = centroid(obj)
+      cellCentroid.properties = {'name': undefined} // Later populated with the sjoin
+      return cellCentroid
+    }))
+
+    // Assing landuse to centroid with polygons (Spatial join)
+    let gridCentroidsWithLanduse = await tag(gridCentroids, osmPolygonsWithLanduse, 'name', 'name')
+
+    // Set each cell properties according to types
+    for (let i = 0; i < gridCentroidsWithLanduse.features.length; i++) {
+        let obj = await gridCentroidsWithLanduse.features[i];
+
+        let selected_type;
+        if (obj.properties.name === undefined) {
+            // Default landuse is Residential (this must change)
+            selected_type = types.filter(type => type.name === 'Residential')[0]
+        } else {
+            selected_type = await types.filter(type => type.name === obj.properties.name)[0]
+        }
+
+        geoJson.features[i].properties = await {
+            color: _hexToRgb(selected_type.color),
+            height: selected_type.height,
+            name: selected_type.name,
+            interactive: selected_type.interactive,
+            id: i,
+        }
+    }
+}
+
 export const gridCreator = async (gridProps, typesList) => {
     let top_left_lon = parseFloat(gridProps.longitude);
     let top_left_lat = parseFloat(gridProps.latitude);
